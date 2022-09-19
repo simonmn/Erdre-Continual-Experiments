@@ -1,0 +1,110 @@
+profile:
+  dataset: broaching_with_toolwear_diff
+  continual: True
+
+clean:
+  target: tool_wear
+  classification: False
+  onehot_encode_target: False
+  combine_files: False
+  percentage_zeros_threshold: 1.0
+  correlation_metric: pearson
+  input_max_correlation_threshold: 1.0
+
+featurize:
+  # If empty, all input variables are used
+  variables_to_include:
+  # - variable1
+  # - variable2
+
+  # Row based engineered features
+  # Features listed must be included above (if not empty), but can be removed after if desired under remove_features
+  row_abs_diff:
+    # - [variable1, variable2]
+
+  # Column based engineered features
+  # By setting this to True, the add_-options below are overrided.
+  # use_all_engineered_features_on_all_variables: True
+  use_all_engineered_features_on_all_variables: False
+
+  # List the variables below each add_* to add engineered feature
+  add_sum:
+    # - variable1
+  add_gradient:
+    # - variable1
+  add_mean:
+    # - variable1
+  add_maximum:
+    # - variable1
+  add_minimum:
+    # - variable1
+  add_min_max_range:
+    # - variable1
+  add_slope:
+    # - variable1
+  add_slope_sin:
+    # - variable1
+  add_slope_cos:
+    # - variable1
+  add_standard_deviation:
+    # - variable1
+  add_variance:
+    # - variable1
+  add_peak_frequency:
+    # - variable1
+  rolling_window_size_sum: 10
+  rolling_window_size_mean: 10
+  rolling_window_size_max_min: 10
+  rolling_window_size_standard_deviation: 10
+
+  # List features here to remove the raw variables after engineering features
+  # from them
+  remove_features:
+    # - variable1
+  target_min_correlation_threshold: 0.0
+
+split:
+  train_split: 0.5
+  shuffle_files: False
+  calibrate_split: 0.0
+
+scale:
+  input: minmax
+  output:
+
+sequentialize:
+  window_size: 25
+  overlap: 0
+  target_size: 1
+  future_predict: False
+  shuffle_samples: False
+
+train:
+  seed: 2020
+  learning_method: xgboost
+  hyperparameter_tuning: False
+
+  # Parameters for deep learning (dnn, cnn, rnn):
+  n_epochs: 100
+  early_stopping: False
+  patience: 20
+  activation_function: relu
+  batch_size: 256
+  n_layers: 2
+  n_neurons: 100
+  dropout: 0.1
+
+  # Parameters for cnn and rnn
+  n_flattened_layers: 2
+  n_flattened_nodes: 16
+
+  # Parameters for cnn:
+  kernel_size: 5
+  maxpooling: False
+  maxpooling_size: 4
+
+  # Parameters for rnn:
+  unit_type: LSTM
+
+evaluate:
+  show_inputs: False
