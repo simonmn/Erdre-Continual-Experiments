@@ -5,11 +5,6 @@ import numpy as np
 import shutil
 import yaml
 
-
-#import sys
-#erdre_path = "../Erdre/src"
-# sys.path.append(erdre_path)
-
 from src.profiling import profiling
 from src.clean import clean
 from src.featurize import featurize
@@ -30,8 +25,6 @@ from continual_config import (
     INPUT_SCALER_PATH,
     INTERVALS_PLOT_PATH,
     METRICS_FILE_PATH,
-    MODELS_FILE_PATH,
-    MODELS_PATH,
     OUTPUT_SCALER_PATH,
     PLOTS_PATH,
     PREDICTION_PLOT_PATH,
@@ -93,14 +86,14 @@ def create_base_model(model_name: str, dataset: str, replay_portion: float):
                         Path("./replay_data/"), replay_portion)
 
     train(DATA_TRAIN_PATH=DATA_COMBINED_PATH / "train.npz",
-          MODELS_FILE_PATH=MODELS_FILE_PATH,
-          MODELS_PATH=MODELS_PATH,
+          MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
+          MODELS_PATH=Path("model_info") / model_name,
           model_exists=False,
           OUTPUT_FEATURES_PATH=OUTPUT_FEATURES_PATH,
           PLOTS_PATH=PLOTS_PATH,
           TRAININGLOSS_PLOT_PATH=TRAININGLOSS_PLOT_PATH)
 
-    evaluate(MODELS_FILE_PATH=MODELS_FILE_PATH,
+    evaluate(MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
              DATA_TRAIN_PATH=DATA_COMBINED_PATH / "train.npz",
              DATA_TEST_PATH=DATA_COMBINED_PATH / "test.npz",
              DATA_CALIBRATE_PATH=DATA_COMBINED_PATH / "calibrate.npz",
@@ -114,8 +107,9 @@ def create_base_model(model_name: str, dataset: str, replay_portion: float):
              PREDICTIONS_PATH=PREDICTIONS_PATH)
 
     model_path = Path("./model_info",  model_name)
-    model_path.mkdir(parents=True, exist_ok=True)
-    shutil.copy(METRICS_FILE_PATH, model_path / f"0-{dataset}-{dataset}.json")
+    metrics_path = model_path / "metrics"
+    metrics_path.mkdir(parents=True, exist_ok=True)
+    shutil.copy(METRICS_FILE_PATH, metrics_path / f"0-{dataset}-{dataset}.json")
 
     yaml_string = f"datasets: [{dataset}]"
     yaml_data = yaml.safe_load(yaml_string)
@@ -174,14 +168,14 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float):
                         Path("./replay_data"))
 
     train(DATA_TRAIN_PATH=DATA_COMBINED_PATH / "train.npz",
-          MODELS_FILE_PATH=MODELS_FILE_PATH,
-          MODELS_PATH=MODELS_PATH,
+          MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
+          MODELS_PATH=Path("model_info") / model_name,
           model_exists=True,
           OUTPUT_FEATURES_PATH=OUTPUT_FEATURES_PATH,
           PLOTS_PATH=PLOTS_PATH,
           TRAININGLOSS_PLOT_PATH=TRAININGLOSS_PLOT_PATH)
 
-    evaluate(MODELS_FILE_PATH=MODELS_FILE_PATH,
+    evaluate(MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
              DATA_TRAIN_PATH=DATA_COMBINED_PATH / "train.npz",
              DATA_TEST_PATH=DATA_COMBINED_PATH / "test.npz",
              DATA_CALIBRATE_PATH=DATA_COMBINED_PATH / "calibrate.npz",
@@ -194,12 +188,13 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float):
              PREDICTIONS_FILE_PATH=PREDICTIONS_FILE_PATH,
              PREDICTIONS_PATH=PREDICTIONS_PATH)
 
-    shutil.copy(METRICS_FILE_PATH,  model_path / f"{len(replay_datasets)}-{dataset}-{dataset}.json")
+    metrics_path = model_path / "metrics"
+    shutil.copy(METRICS_FILE_PATH, metrics_path / f"{len(replay_datasets)}-{dataset}-{dataset}.json")
     
     for ds in replay_datasets:
         replay_path = Path("./replay_data")
         
-        evaluate(MODELS_FILE_PATH=MODELS_FILE_PATH,
+        evaluate(MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
                  DATA_TRAIN_PATH=replay_path / "train" / f"{ds}.npz",
                  DATA_TEST_PATH=replay_path / "test" / f"{ds}.npz",
                  DATA_CALIBRATE_PATH=replay_path / "calibrate" / f"{ds}.npz",
@@ -212,7 +207,7 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float):
                  PREDICTIONS_FILE_PATH=PREDICTIONS_FILE_PATH,
                  PREDICTIONS_PATH=PREDICTIONS_PATH)
         
-        shutil.copy(METRICS_FILE_PATH,  model_path / f"{len(replay_datasets)}-{dataset}-{ds}.json")
+        shutil.copy(METRICS_FILE_PATH,  metrics_path / f"{len(replay_datasets)}-{dataset}-{ds}.json")
 
     replay_datasets.append(dataset)
     yaml.safe_dump(datasets_yaml, open(model_path / "continual.yaml", "w"))
@@ -274,9 +269,7 @@ def clean_folders():
             os.remove(os.path.join(dir, f))
 
 
-def move_param_file(param_filename: str):
-    shutil.copy("params.yaml", "params.yaml.BAK")
-    
+def move_param_file(param_filename: str):    
     shutil.copy(Path("./param_files") / param_filename, "params.yaml")
     
 

@@ -1,11 +1,11 @@
 clean:
-  classification: true
+  classification: false
   combine_files: false
   correlation_metric: pearson
   input_max_correlation_threshold: 1.0
   onehot_encode_target: false
   percentage_zeros_threshold: 1.0
-  target: tool_condition
+  target: tool_wear
 evaluate:
   show_inputs: false
 featurize:
@@ -26,29 +26,13 @@ featurize:
   rolling_window_size_mean: 10
   rolling_window_size_standard_deviation: 10
   rolling_window_size_sum: 10
-  row_abs_diff:
-  - - X1_ActualPosition
-    - X1_CommandPosition
-  - - Y1_ActualPosition
-    - Y1_CommandPosition
-  - - Z1_ActualPosition
-    - Z1_CommandPosition
-  - - S1_ActualPosition
-    - S1_CommandPosition
+  row_abs_diff: null
   target_min_correlation_threshold: 0.0
   use_all_engineered_features_on_all_variables: false
-  variables_to_include:
-  - X1_CommandPosition
-  - X1_ActualPosition
-  - Y1_CommandPosition
-  - Y1_ActualPosition
-  - Z1_CommandPosition
-  - Z1_ActualPosition
-  - S1_ActualPosition
-  - S1_CommandPosition
+  variables_to_include: null
 profile:
   continual: true
-  dataset: cnc_milling_with_toolwear_fourth
+  dataset: broaching_toolwear_5X
 scale:
   input: minmax
   output: null
@@ -72,7 +56,7 @@ train:
   learning_method: xgboost
   maxpooling: false
   maxpooling_size: 4
-  n_epochs: 1000
+  n_epochs: 100
   n_flattened_layers: 2
   n_flattened_nodes: 16
   n_layers: 2
