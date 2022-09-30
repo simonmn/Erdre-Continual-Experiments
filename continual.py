@@ -1,9 +1,13 @@
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 import numpy as np
 import shutil
 import yaml
+import json
+import pandas as pd
+
+np.random.seed(2022)
 
 from src.profiling import profiling
 from src.clean import clean
@@ -82,18 +86,24 @@ def create_base_model(model_name: str, dataset: str, replay_portion: float):
     combine(DATA_SEQUENTIALIZED_PATH=DATA_SEQUENTIALIZED_PATH,
             DATA_COMBINED_PATH=DATA_COMBINED_PATH)
 
+    # Store portion for future replay
     move_replay_portion(dataset, DATA_COMBINED_PATH,
                         Path("./replay_data/"), replay_portion)
 
+    model_path = Path("./model_info",  model_name)
+    model_file_path = model_path / "model.h5"
+
+    # Train new model
     train(DATA_TRAIN_PATH=DATA_COMBINED_PATH / "train.npz",
-          MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
-          MODELS_PATH=Path("model_info") / model_name,
+          MODELS_FILE_PATH=model_file_path,
+          MODELS_PATH=model_path,
           model_exists=False,
           OUTPUT_FEATURES_PATH=OUTPUT_FEATURES_PATH,
           PLOTS_PATH=PLOTS_PATH,
           TRAININGLOSS_PLOT_PATH=TRAININGLOSS_PLOT_PATH)
 
-    evaluate(MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
+    # Evaluate model on basedata
+    evaluate(MODELS_FILE_PATH=model_file_path,
              DATA_TRAIN_PATH=DATA_COMBINED_PATH / "train.npz",
              DATA_TEST_PATH=DATA_COMBINED_PATH / "test.npz",
              DATA_CALIBRATE_PATH=DATA_COMBINED_PATH / "calibrate.npz",
@@ -106,10 +116,15 @@ def create_base_model(model_name: str, dataset: str, replay_portion: float):
              PREDICTIONS_FILE_PATH=PREDICTIONS_FILE_PATH,
              PREDICTIONS_PATH=PREDICTIONS_PATH)
 
-    model_path = Path("./model_info",  model_name)
     metrics_path = model_path / "metrics"
     metrics_path.mkdir(parents=True, exist_ok=True)
+    model_storage_path = model_path / "models"
+    model_storage_path.mkdir(parents=True, exist_ok=True)
+    
+    # Store metric
     shutil.copy(METRICS_FILE_PATH, metrics_path / f"0-{dataset}-{dataset}.json")
+    # Store model
+    shutil.copy(model_path / "model.h5", model_storage_path / "model_0.h5")
 
     yaml_string = f"datasets: [{dataset}]"
     yaml_data = yaml.safe_load(yaml_string)
@@ -161,21 +176,29 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float):
     combine(DATA_SEQUENTIALIZED_PATH=DATA_SEQUENTIALIZED_PATH,
             DATA_COMBINED_PATH=DATA_COMBINED_PATH)
 
+    # Store portion for future replay
     move_replay_portion(dataset, DATA_COMBINED_PATH,
                         Path("./replay_data/"), replay_portion)
 
+    replay_path = Path("./replay_data")
+    # Prepare new and replay data for training
     combine_replay_data(replay_datasets, DATA_COMBINED_PATH,
-                        Path("./replay_data"))
+                        replay_path)
 
+    model_path = Path("./model_info",  model_name)
+    model_file_path = model_path / "model.h5"
+
+    # Load old model and train it
     train(DATA_TRAIN_PATH=DATA_COMBINED_PATH / "train.npz",
-          MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
-          MODELS_PATH=Path("model_info") / model_name,
+          MODELS_FILE_PATH=model_file_path,
+          MODELS_PATH=model_path,
           model_exists=True,
           OUTPUT_FEATURES_PATH=OUTPUT_FEATURES_PATH,
           PLOTS_PATH=PLOTS_PATH,
           TRAININGLOSS_PLOT_PATH=TRAININGLOSS_PLOT_PATH)
 
-    evaluate(MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
+    # Evaluate model on newest data
+    evaluate(MODELS_FILE_PATH=model_file_path,
              DATA_TRAIN_PATH=DATA_COMBINED_PATH / "train.npz",
              DATA_TEST_PATH=DATA_COMBINED_PATH / "test.npz",
              DATA_CALIBRATE_PATH=DATA_COMBINED_PATH / "calibrate.npz",
@@ -189,11 +212,34 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float):
              PREDICTIONS_PATH=PREDICTIONS_PATH)
 
     metrics_path = model_path / "metrics"
+    # Store metrics
     shutil.copy(METRICS_FILE_PATH, metrics_path / f"{len(replay_datasets)}-{dataset}-{dataset}.json")
     
+    # Prepare replay test data
+    combine_test_data(replay_datasets, DATA_COMBINED_PATH,
+                        replay_path)
+    
+    # Evaluate on replay test data
+    evaluate(MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
+                 DATA_TRAIN_PATH=DATA_COMBINED_PATH / "train.npz",
+                 DATA_TEST_PATH=DATA_COMBINED_PATH / "test.npz",
+                 DATA_CALIBRATE_PATH=DATA_COMBINED_PATH / "calibrate.npz",
+                 INPUT_FEATURES_PATH=INPUT_FEATURES_PATH,
+                 INTERVALS_PLOT_PATH=INTERVALS_PLOT_PATH,
+                 METRICS_FILE_PATH=METRICS_FILE_PATH,
+                 OUTPUT_FEATURES_PATH=OUTPUT_FEATURES_PATH,
+                 PLOTS_PATH=PLOTS_PATH,
+                 PREDICTION_PLOT_PATH=PREDICTION_PLOT_PATH,
+                 PREDICTIONS_FILE_PATH=PREDICTIONS_FILE_PATH,
+                 PREDICTIONS_PATH=PREDICTIONS_PATH)
+    
+    shutil.copy(METRICS_FILE_PATH, metrics_path / f"{len(replay_datasets)}-{dataset}-combined_previous_data.json")
+    model_storage_path = model_path / "models"
+    # Store model (currently only used for base_model (i.e. version 0))
+    shutil.copy(model_path / "model.h5", model_storage_path / f"model_{len(replay_datasets)}.h5")
+    
+    # Evaluate on each available replay dataset (individually)
     for ds in replay_datasets:
-        replay_path = Path("./replay_data")
-        
         evaluate(MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
                  DATA_TRAIN_PATH=replay_path / "train" / f"{ds}.npz",
                  DATA_TEST_PATH=replay_path / "test" / f"{ds}.npz",
@@ -211,6 +257,175 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float):
 
     replay_datasets.append(dataset)
     yaml.safe_dump(datasets_yaml, open(model_path / "continual.yaml", "w"))
+
+
+def run_continual_on_all_datasets_all_replays(basename: str, param_file: str, datasets: List[str], replay_values: List[int]):
+    assert min(
+        replay_values) >= 0, "All replay portions must be larger than 0 (percentage to replay)."
+    assert max(
+        replay_values) <= 100, "All replay portions must be smaller than 100 (percentage to replay)."
+
+    move_param_file(param_file)
+
+    for replay_value in replay_values:
+        run_continual_on_all_datasets(basename, datasets, replay_value)
+    evaluate_basemodel_on_all(f"{basename}_{replay_values[0]}_replay", datasets)
+
+
+def run_continual_on_all_datasets(basename: str, datasets: List[str], replay_value: int):
+    name = f"{basename}_{replay_value}_replay"
+    
+    create_base_model(name,
+                      datasets[0], replay_value/100)
+    
+    for dataset in datasets[1:]:
+        continue_from_model(name, dataset, replay_value/100)
+    convert_json_metrics_to_csv(name)
+    wanted_metrics(name, datasets[0])
+
+
+def evaluate_basemodel_on_all(model_name, datasets):
+    replay_path = Path("./replay_data")
+    for dataset in datasets:
+        train_path = replay_path / "train" / f"{dataset}.npz"
+        test_path = replay_path / "test" / f"{dataset}.npz"
+        calibrate_path = replay_path / "calibrate" / f"{dataset}.npz"
+        
+        evaluate(MODELS_FILE_PATH=Path("./model_info") / model_name / "models" / "model_0.h5",
+             DATA_TRAIN_PATH=train_path,
+             DATA_TEST_PATH=test_path,
+             DATA_CALIBRATE_PATH=calibrate_path,
+             INPUT_FEATURES_PATH=INPUT_FEATURES_PATH,
+             INTERVALS_PLOT_PATH=INTERVALS_PLOT_PATH,
+             METRICS_FILE_PATH=METRICS_FILE_PATH,
+             OUTPUT_FEATURES_PATH=OUTPUT_FEATURES_PATH,
+             PLOTS_PATH=PLOTS_PATH,
+             PREDICTION_PLOT_PATH=PREDICTION_PLOT_PATH,
+             PREDICTIONS_FILE_PATH=PREDICTIONS_FILE_PATH,
+             PREDICTIONS_PATH=PREDICTIONS_PATH)
+        
+        model_path = Path("./model_info",  model_name)
+        metrics_path = model_path / "metrics" / "baseline_model"
+        metrics_path.mkdir(parents=True, exist_ok=True)
+        shutil.copy(METRICS_FILE_PATH, metrics_path / f"0-baseline-{dataset}.json")
+        
+        csv_file = open(model_path / "baseline_metrics.csv", "w")
+        
+        for file in metrics_path.glob("*.json"):
+            metrics = open(file, "r")
+            json_metrics = json.load(metrics)
+            csv_file.write(f"model_version,trained_data,evaluated_data,{','.join(json_metrics.keys())}\n")
+            metrics.close()
+            break
+        
+        for file in metrics_path.glob("*.json"):
+            idx, trained_data, evaluated_data = str(file).split("/")[-1][:-5].split("-")
+            metrics = open(file, "r")
+            json_metrics = json.load(metrics)
+            
+            csv_file.write(f"{idx},{trained_data},{evaluated_data},{','.join([str(json_metrics[key]) for key in json_metrics.keys()])}\n")
+        
+        csv_file.close()
+
+
+def convert_json_metrics_to_csv(basedir: str):
+    path = Path("model_info", basedir)
+    csv_file = open(path / "metrics.csv", "w")
+    metrics_path = path / "metrics"
+    
+    for file in metrics_path.glob("*.json"):
+        metrics = open(file, "r")
+        json_metrics = json.load(metrics)
+        csv_file.write(f"model_version,trained_data,evaluated_data,{','.join(json_metrics.keys())}\n")
+        metrics.close()
+        break
+    
+    for file in metrics_path.glob("*.json"):
+        idx, trained_data, evaluated_data = str(file).split("/")[-1][:-5].split("-")
+        metrics = open(file, "r")
+        json_metrics = json.load(metrics)
+        
+        csv_file.write(f"{idx},{trained_data},{evaluated_data},{','.join([str(json_metrics[key]) for key in json_metrics.keys()])}\n")
+    
+    csv_file.close()
+    
+    _sort_dataframe(basedir)
+
+
+def baseline_metrics_to_csv(basedir: str):
+    path = Path("model_info", basedir, "metrics")
+    csv_file_path = path.parent / "baseline_metrics.csv"
+    csv_file = open(csv_file_path, "w")
+    metrics_path = path / "baseline_model"
+    
+    for file in metrics_path.glob("*.json"):
+        with open(file, "r") as metrics:
+            json_metrics = json.load(metrics)
+        csv_file.write(f"model_version,trained_data,evaluated_data,{','.join(json_metrics.keys())}\n")
+        break
+    
+    for file in metrics_path.glob("*.json"):
+        idx, trained_data, evaluated_data = str(file).split("/")[-1][:-5].split("-")
+        with open(file, "r") as metrics:
+            json_metrics = json.load(metrics)
+        
+        csv_file.write(f"{idx},{trained_data},{evaluated_data},{','.join([str(json_metrics[key]) for key in json_metrics.keys()])}\n")
+    
+    csv_file.close()
+    
+    df = pd.read_csv(csv_file_path)
+    df = df.sort_values(["model_version", "trained_data", "evaluated_data"], ascending=[True, True, True])
+    df = df.reset_index(drop=True)
+    cols = [col for col in df.columns if col not in ["mse", "rmse", "mape"]]
+    df.to_csv(csv_file_path, index=False, columns=cols)
+
+
+def baseline_to_tex(name: str, dir: str, metric: str):
+    basedir = Path("./model_info")
+    csv_path = basedir / dir / "baseline_metrics.csv"
+    df = pd.read_csv(csv_path)
+    df.to_latex(name, index=False, columns=[col for col in df.columns if col not in ["model_version", "trained_data", "mse", "rmse" "mape"]], float_format="%.3f")
+
+
+def combine_metrics_different_replay(gathered_filename: str, filename: str, dirs: List[str], replays: List[int], metric: str):
+    basedir = Path("./model_info")
+    complete_df = pd.DataFrame()
+    for dir, replay in zip(dirs, replays):
+        csv_path = basedir / dir / filename
+        df = pd.read_csv(csv_path)
+        complete_df["evaluated_data"] = df["evaluated_data"]
+        complete_df[f"{metric}_{replay}"] = df[metric]
+    complete_df.to_latex(gathered_filename, index=False, float_format="%.3f")
+
+
+def _sort_dataframe(basedir):
+    path = Path("model_info", basedir)
+    metrics_path = path / "metrics.csv"
+    
+    df = pd.read_csv(metrics_path)
+    df = df.sort_values(["model_version", "trained_data", "evaluated_data"], ascending=[True, True, True])
+    df = df.reset_index(drop=True)
+    df.to_csv(metrics_path, index=False, columns=[col for col in df.columns if col not in ["mse", "rmse" "mape"]])
+
+
+def wanted_metrics(basedir, basedataset):
+    path = Path("model_info", basedir)
+    metrics_path = path / "metrics.csv"
+    
+    df = pd.read_csv(metrics_path)
+    
+    train_eval_same = df[df["trained_data"] == df["evaluated_data"]]
+    eval_base_data = df[df["evaluated_data"] == basedataset]
+    eval_combined_previous_data = df[df["evaluated_data"] == "combined_previous_data"]
+    
+    included_columns = [col for col in train_eval_same.columns if col != "model_version"]
+    
+    train_eval_same.to_csv(path / "same_train_eval.csv", index=False, columns=included_columns)
+    train_eval_same.to_latex(path / "same_train_eval.tex", index=False, columns=included_columns)
+    eval_base_data.to_csv(path / "eval_base_data.csv", index=False, columns=included_columns)
+    eval_base_data.to_latex(path / "eval_base_data.tex", index=False, columns=included_columns)
+    eval_combined_previous_data.to_csv(path / "eval_combined_previous_data.csv", index=False, columns=included_columns)
+    eval_combined_previous_data.to_latex(path / "eval_combined_previous_data.tex", index=False, columns=included_columns)
 
 
 def move_replay_portion(dataset: str, source: Path, destination: Path, replay_portion: float):
@@ -238,6 +453,21 @@ def move_replay_portion(dataset: str, source: Path, destination: Path, replay_po
     except FileNotFoundError:
         # print("FileNotFoundError")
         pass
+
+
+def combine_test_data(datasets: List[str], source_new: Path, source_replay: Path):
+    test = np.load(source_new / "test.npz", "r")
+    X_test = test["X"]
+    y_test = test["y"]
+
+    for dataset in datasets:
+        test_path = source_replay / "test" / f"{dataset}.npz"
+        test_replay = np.load(test_path, "r")
+
+        X_test = np.vstack((X_test, test_replay["X"]))
+        y_test = np.vstack((y_test, test_replay["y"]))
+
+    np.savez(source_new / "test.npz", X=X_test, y=y_test)
 
 
 def combine_replay_data(datasets: List[str], source_new: Path, source_replay: Path):
