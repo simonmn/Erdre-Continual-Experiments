@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 import numpy as np
 import shutil
 import yaml
@@ -46,6 +46,7 @@ from continual_config import (
 
 
 def create_base_model(model_name: str, dataset: str, replay_portion: float):
+    np.random.seed(2022)
     clean_folders()
     update_dataset_param(dataset)
 
@@ -132,6 +133,7 @@ def create_base_model(model_name: str, dataset: str, replay_portion: float):
 
 
 def continue_from_model(model_name: str, dataset: str, replay_portion: float):
+    np.random.seed(2022)
     model_path = Path("./model_info",  model_name)
     datasets_yaml = yaml.safe_load(open(model_path / "continual.yaml", "r"))
     replay_datasets = datasets_yaml["datasets"]
@@ -234,9 +236,6 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float):
                  PREDICTIONS_PATH=PREDICTIONS_PATH)
     
     shutil.copy(METRICS_FILE_PATH, metrics_path / f"{len(replay_datasets)}-{dataset}-combined_previous_data.json")
-    model_storage_path = model_path / "models"
-    # Store model (currently only used for base_model (i.e. version 0))
-    shutil.copy(model_path / "model.h5", model_storage_path / f"model_{len(replay_datasets)}.h5")
     
     # Evaluate on each available replay dataset (individually)
     for ds in replay_datasets:
@@ -260,6 +259,7 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float):
 
 
 def run_continual_on_all_datasets_all_replays(basename: str, param_file: str, datasets: List[str], replay_values: List[int]):
+    np.random.seed(2022)
     assert min(
         replay_values) >= 0, "All replay portions must be larger than 0 (percentage to replay)."
     assert max(
@@ -269,10 +269,11 @@ def run_continual_on_all_datasets_all_replays(basename: str, param_file: str, da
 
     for replay_value in replay_values:
         run_continual_on_all_datasets(basename, datasets, replay_value)
-    evaluate_basemodel_on_all(f"{basename}_{replay_values[0]}_replay", datasets)
+        evaluate_basemodel_on_all(f"{basename}_{replay_value}_replay", datasets)
 
 
 def run_continual_on_all_datasets(basename: str, datasets: List[str], replay_value: int):
+    np.random.seed(2022)
     name = f"{basename}_{replay_value}_replay"
     
     create_base_model(name,
@@ -285,6 +286,8 @@ def run_continual_on_all_datasets(basename: str, datasets: List[str], replay_val
 
 
 def evaluate_basemodel_on_all(model_name, datasets):
+    np.random.seed(2022)
+    print(f"Evaluating {model_name} on {datasets}")
     replay_path = Path("./replay_data")
     for dataset in datasets:
         train_path = replay_path / "train" / f"{dataset}.npz"
@@ -380,7 +383,7 @@ def baseline_metrics_to_csv(basedir: str):
     df.to_csv(csv_file_path, index=False, columns=cols)
 
 
-def baseline_to_tex(name: str, dir: str, metric: str):
+def baseline_to_tex(name: str, dir: str):
     basedir = Path("./model_info")
     csv_path = basedir / dir / "baseline_metrics.csv"
     df = pd.read_csv(csv_path)
@@ -420,15 +423,16 @@ def wanted_metrics(basedir, basedataset):
     
     included_columns = [col for col in train_eval_same.columns if col != "model_version"]
     
+    #train_eval_same.to_latex(path / "same_train_eval.tex", index=False, columns=included_columns)
+    #eval_base_data.to_latex(path / "eval_base_data.tex", index=False, columns=included_columns)
+    #eval_combined_previous_data.to_latex(path / "eval_combined_previous_data.tex", index=False, columns=included_columns)
     train_eval_same.to_csv(path / "same_train_eval.csv", index=False, columns=included_columns)
-    train_eval_same.to_latex(path / "same_train_eval.tex", index=False, columns=included_columns)
     eval_base_data.to_csv(path / "eval_base_data.csv", index=False, columns=included_columns)
-    eval_base_data.to_latex(path / "eval_base_data.tex", index=False, columns=included_columns)
     eval_combined_previous_data.to_csv(path / "eval_combined_previous_data.csv", index=False, columns=included_columns)
-    eval_combined_previous_data.to_latex(path / "eval_combined_previous_data.tex", index=False, columns=included_columns)
 
 
 def move_replay_portion(dataset: str, source: Path, destination: Path, replay_portion: float):
+    np.random.seed(2022)
     try:
         train = np.load(source / "train.npz")
         #test = np.load(source / "test.npz")
@@ -436,7 +440,8 @@ def move_replay_portion(dataset: str, source: Path, destination: Path, replay_po
 
         X_train = train["X"]
         y_train = train["y"]
-        train_indices = np.random.choice(
+        rng = np.random.RandomState(2022)
+        train_indices = rng.choice(
             X_train.shape[0], int(replay_portion * X_train.shape[0]))
 
         X_train = X_train[train_indices, :]
@@ -444,7 +449,6 @@ def move_replay_portion(dataset: str, source: Path, destination: Path, replay_po
 
         np.savez(destination / "train" /
                  f"{dataset}.npz", X=X_train, y=y_train)
-
         shutil.copy(source / "test.npz", destination /
                     "test" / f"{dataset}.npz")
         shutil.copy(source / "calibrate.npz", destination /
@@ -497,6 +501,12 @@ def clean_folders():
     for dir in [DATA_CLEANED_PATH, DATA_FEATURIZED_PATH, DATA_SCALED_PATH, DATA_SEQUENTIALIZED_PATH, DATA_SPLIT_PATH]:
         for f in os.listdir(dir):
             os.remove(os.path.join(dir, f))
+    
+    replay_path = Path("replay_data")
+    
+    (replay_path / "train").mkdir(parents=True, exist_ok=True)
+    (replay_path / "test").mkdir(parents=True, exist_ok=True)
+    (replay_path / "calibrate").mkdir(parents=True, exist_ok=True)
 
 
 def move_param_file(param_filename: str):    
