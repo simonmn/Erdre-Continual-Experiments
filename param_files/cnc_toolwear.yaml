@@ -1,7 +1,7 @@
 profile:
     # dataset: broaching_with_toolwear
     dataset: cnc_milling_with_toolwear
-    continual: true
+    continual: True
 
 clean:
     # target: fas_category
@@ -12,7 +12,7 @@ clean:
 
     classification: True
     onehot_encode_target: False
-    combine_files: False
+    combine_files: True
     percentage_zeros_threshold: 1.0
     correlation_metric: pearson
     input_max_correlation_threshold: 1.0
@@ -82,7 +82,7 @@ featurize:
 
 split:
     train_split: 0.5
-    shuffle_files: False
+    shuffle_files: True
     calibrate_split: 0.0
 
 scale:
@@ -93,7 +93,7 @@ sequentialize:
     window_size: 25
     overlap: 0
     target_size: 1
-    shuffle_samples: False
+    shuffle_samples: True
     future_predict: False
 
 train:
@@ -102,7 +102,7 @@ train:
     hyperparameter_tuning: False
 
     # Parameters for deep learning (dnn, cnn, rnn):
-    n_epochs: 1000
+    n_epochs: 100
     early_stopping: False
     patience: 20
     activation_function: relu
