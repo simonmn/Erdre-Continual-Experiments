@@ -17,7 +17,7 @@ def experiment(exp_name: str, replay_portions: List[int], datasets: List[str], y
         exp_name, yaml_filename,
         datasets, replay_portions)
     
-    baseline_metrics("broaching_toolwear_baseline.tex", f"{exp_name}_{replay_portions[0]}_replay", datasets)
+    baseline_metrics(f"{exp_name}_baseline.tex", f"{exp_name}_{replay_portions[0]}_replay", datasets)
     
     replay_dirs = [f"{exp_name}_{r}_replay" for r in replay_portions]
     
@@ -30,7 +30,7 @@ def experiment(exp_name: str, replay_portions: List[int], datasets: List[str], y
     )
     
     combine_metrics_different_replay(
-        f"{exp_name}_broaching_eval_recent.tex",
+        f"{exp_name}_eval_recent.tex",
         "same_train_eval.csv",
         replay_dirs,
         replay_portions,
@@ -102,5 +102,9 @@ if __name__ == "__main__":
     
     #broaching_tw_experiment()
     
-    piston_rod_datasets = ["piston_rod_1_100", "piston_rod_101_200", "piston_rod_201_273"]
+    piston_rod_datasets = ["piston_rod_set_1",
+                           "piston_rod_set_2",
+                           "piston_rod_set_3",
+                           "piston_rod_set_4",
+                           "piston_rod_set_5"]
     experiment("piston_rod", [0, 20, 60, 100], piston_rod_datasets, "piston_rod.yaml", "r2")
