@@ -172,9 +172,9 @@ featurize:
     # List features here to remove the raw variables after engineering features
     # from them
     remove_features:
-        - timestamp
-        - TimeSinceStartup
-        - machining_timesteps
+        #- timestamp
+        #- TimeSinceStartup
+        #- machining_timesteps
         # - variable1
     target_min_correlation_threshold: 0.0
 
