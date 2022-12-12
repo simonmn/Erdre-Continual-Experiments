@@ -41,7 +41,7 @@ dulwich==0.20.32
 dvc==2.9.5
 edward2==0.0.2
 entrypoints==0.4
-erdre @ git+https://github.com/simonmn/Erdre@eafc92a552960593c9f1712114eacfa652629c81
+erdre @ git+https://github.com/simonmn/Erdre.git@076924b48b2201cff36d0d13169e0cd38eaf610d
 executing==0.8.3
 filelock==3.8.0
 Flask==2.0.3

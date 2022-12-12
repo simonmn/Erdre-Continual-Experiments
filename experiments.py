@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List
 import numpy as np
 
@@ -17,22 +18,20 @@ def experiment(exp_name: str, replay_portions: List[int], datasets: List[str], y
         exp_name, yaml_filename,
         datasets, replay_portions)
     
-    baseline_metrics(f"{exp_name}_baseline.tex", f"{exp_name}_{replay_portions[0]}_replay", datasets)
-    
-    replay_dirs = [f"{exp_name}_{r}_replay" for r in replay_portions]
+    baseline_metrics(Path("./models", exp_name, "baseline.tex"), Path("./models", exp_name, str(replay_portions[0])), datasets)
     
     combine_metrics_different_replay(
-        f"{exp_name}_eval_prev.tex",
+        "eval_prev.tex",
         "eval_combined_previous_data.csv",
-        replay_dirs,
+        exp_name,
         replay_portions,
         metric
     )
     
     combine_metrics_different_replay(
-        f"{exp_name}_eval_recent.tex",
+        "eval_recent.tex",
         "same_train_eval.csv",
-        replay_dirs,
+        exp_name,
         replay_portions,
         metric
     )

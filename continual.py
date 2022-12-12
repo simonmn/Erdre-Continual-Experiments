@@ -8,16 +8,7 @@ import json
 import pandas as pd
 
 np.random.seed(2022)
-
-from src.profiling import profiling
-from src.clean import clean
-from src.featurize import featurize
-from src.split import split
-from src.scale import scale
-from src.sequentialize import sequentialize
-from src.combine import combine
-from src.train import train
-from src.evaluate import evaluate
+from erdre import profiling, clean, featurize, split, scale, sequentialize, combine, train, evaluate
 
 from continual_config import (
     DATA_COMBINED_PATH,
@@ -45,7 +36,7 @@ from continual_config import (
 )
 
 
-def create_base_model(model_name: str, dataset: str, replay_portion: float):
+def create_base_model(model_name: str, dataset: str, replay_portion: float, model_path: Path):
     np.random.seed(2022)
     clean_folders()
     update_dataset_param(dataset)
@@ -89,9 +80,9 @@ def create_base_model(model_name: str, dataset: str, replay_portion: float):
 
     # Store portion for future replay
     move_replay_portion(dataset, DATA_COMBINED_PATH,
-                        Path("./replay_data/"), replay_portion)
+                        Path("./replay_data/"), replay_portion/100)
 
-    model_path = Path("./model_info",  model_name)
+    #model_path = Path("./models",  model_name, replay_portion)
     model_file_path = model_path / "model.h5"
 
     # Train new model
@@ -129,13 +120,12 @@ def create_base_model(model_name: str, dataset: str, replay_portion: float):
 
     yaml_string = f"datasets: [{dataset}]"
     yaml_data = yaml.safe_load(yaml_string)
-    yaml.safe_dump(yaml_data, open(model_path / "continual.yaml", "w"))
+    yaml.safe_dump(yaml_data, open(model_path / "history.yaml", "w"))
 
 
-def continue_from_model(model_name: str, dataset: str, replay_portion: float):
+def continue_from_model(model_name: str, dataset: str, replay_portion: float, model_path: Path):
     np.random.seed(2022)
-    model_path = Path("./model_info",  model_name)
-    datasets_yaml = yaml.safe_load(open(model_path / "continual.yaml", "r"))
+    datasets_yaml = yaml.safe_load(open(model_path / "history.yaml", "r"))
     replay_datasets = datasets_yaml["datasets"]
 
     clean_folders()
@@ -180,14 +170,14 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float):
 
     # Store portion for future replay
     move_replay_portion(dataset, DATA_COMBINED_PATH,
-                        Path("./replay_data/"), replay_portion)
+                        Path("./replay_data/"), replay_portion/100)
 
     replay_path = Path("./replay_data")
     # Prepare new and replay data for training
     combine_replay_data(replay_datasets, DATA_COMBINED_PATH,
                         replay_path)
 
-    model_path = Path("./model_info",  model_name)
+    #model_path = Path("./models",  model_name, replay_portion)
     model_file_path = model_path / "model.h5"
 
     # Load old model and train it
@@ -222,7 +212,7 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float):
                         replay_path)
     
     # Evaluate on replay test data
-    evaluate(MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
+    evaluate(MODELS_FILE_PATH=model_path / "model.h5",
                  DATA_TRAIN_PATH=DATA_COMBINED_PATH / "train.npz",
                  DATA_TEST_PATH=DATA_COMBINED_PATH / "test.npz",
                  DATA_CALIBRATE_PATH=DATA_COMBINED_PATH / "calibrate.npz",
@@ -239,7 +229,7 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float):
     
     # Evaluate on each available replay dataset (individually)
     for ds in replay_datasets:
-        evaluate(MODELS_FILE_PATH=Path("model_info") / model_name / "model.h5",
+        evaluate(MODELS_FILE_PATH=model_path / "model.h5",
                  DATA_TRAIN_PATH=replay_path / "train" / f"{ds}.npz",
                  DATA_TEST_PATH=replay_path / "test" / f"{ds}.npz",
                  DATA_CALIBRATE_PATH=replay_path / "calibrate" / f"{ds}.npz",
@@ -255,7 +245,7 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float):
         shutil.copy(METRICS_FILE_PATH,  metrics_path / f"{len(replay_datasets)}-{dataset}-{ds}.json")
 
     replay_datasets.append(dataset)
-    yaml.safe_dump(datasets_yaml, open(model_path / "continual.yaml", "w"))
+    yaml.safe_dump(datasets_yaml, open(model_path / "history.yaml", "w"))
 
 
 def run_continual_on_all_datasets_all_replays(basename: str, param_file: str, datasets: List[str], replay_values: List[int]):
@@ -266,35 +256,48 @@ def run_continual_on_all_datasets_all_replays(basename: str, param_file: str, da
         replay_values) <= 100, "All replay portions must be smaller than 100 (percentage to replay)."
 
     move_param_file(param_file)
-
-    for replay_value in replay_values:
-        run_continual_on_all_datasets(basename, datasets, replay_value)
-        evaluate_basemodel_on_all(f"{basename}_{replay_value}_replay", datasets)
-
-
-def run_continual_on_all_datasets(basename: str, datasets: List[str], replay_value: int):
-    np.random.seed(2022)
-    name = f"{basename}_{replay_value}_replay"
     
-    create_base_model(name,
-                      datasets[0], replay_value/100)
+    # Run first time, creates original model which we use for other replay values
+    run_continual_on_all_datasets(basename, datasets, replay_values[0])
+    evaluate_basemodel_on_all(Path("./models", basename, str(replay_values[0])), datasets)
+
+    basemodel = Path("./models", basename, str(replay_values[0]), "models", "model_0.h5")
+    for replay_value in replay_values[1:]:
+        # Use basemodel instead of creating new, currently a new model is created, but discarded as
+        # there is currently tight coupling between moving replay portion for future use and 
+        # creating the base model.
+        run_continual_on_all_datasets(basename, datasets, replay_value, basemodel)
+        evaluate_basemodel_on_all(Path("./models", basename, str(replay_value)), datasets)
+
+
+def run_continual_on_all_datasets(basename: str, datasets: List[str], replay_value: int, basemodel: Path = None):
+    np.random.seed(2022)
+    
+    model_path = Path("./models",  basename, str(replay_value))
+    
+    create_base_model(basename,
+                      datasets[0], replay_value, model_path)
+    
+    if basemodel is not None:
+        shutil.copy(basemodel, Path(model_path, "models", "model_0.h5"))
+        shutil.copy(basemodel, Path(model_path, "model.h5"))
     
     for dataset in datasets[1:]:
-        continue_from_model(name, dataset, replay_value/100)
-    convert_json_metrics_to_csv(name)
-    wanted_metrics(name, datasets[0])
+        continue_from_model(basename, dataset, replay_value, model_path)
+    convert_json_metrics_to_csv(basename, replay_value)
+    wanted_metrics(model_path, datasets[0])
 
 
-def evaluate_basemodel_on_all(model_name, datasets):
+def evaluate_basemodel_on_all(model_path: Path, datasets: List[str]):
     np.random.seed(2022)
-    print(f"Evaluating {model_name} on {datasets}")
+    print(f"Evaluating {model_path} on {datasets}")
     replay_path = Path("./replay_data")
     for dataset in datasets:
         train_path = replay_path / "train" / f"{dataset}.npz"
         test_path = replay_path / "test" / f"{dataset}.npz"
         calibrate_path = replay_path / "calibrate" / f"{dataset}.npz"
         
-        evaluate(MODELS_FILE_PATH=Path("./model_info") / model_name / "models" / "model_0.h5",
+        evaluate(MODELS_FILE_PATH=model_path / "model.h5",
              DATA_TRAIN_PATH=train_path,
              DATA_TEST_PATH=test_path,
              DATA_CALIBRATE_PATH=calibrate_path,
@@ -307,7 +310,6 @@ def evaluate_basemodel_on_all(model_name, datasets):
              PREDICTIONS_FILE_PATH=PREDICTIONS_FILE_PATH,
              PREDICTIONS_PATH=PREDICTIONS_PATH)
         
-        model_path = Path("./model_info",  model_name)
         metrics_path = model_path / "metrics" / "baseline_model"
         metrics_path.mkdir(parents=True, exist_ok=True)
         shutil.copy(METRICS_FILE_PATH, metrics_path / f"0-baseline-{dataset}.json")
@@ -331,8 +333,8 @@ def evaluate_basemodel_on_all(model_name, datasets):
         csv_file.close()
 
 
-def convert_json_metrics_to_csv(basedir: str):
-    path = Path("model_info", basedir)
+def convert_json_metrics_to_csv(basename: str, replay_value: int):
+    path = Path("models", basename, str(replay_value))
     csv_file = open(path / "metrics.csv", "w")
     metrics_path = path / "metrics"
     
@@ -352,11 +354,11 @@ def convert_json_metrics_to_csv(basedir: str):
     
     csv_file.close()
     
-    _sort_dataframe(basedir)
+    _sort_dataframe(path)
 
 
 def baseline_metrics_to_csv(basedir: str):
-    path = Path("model_info", basedir, "metrics")
+    path = Path(basedir, "metrics")
     csv_file_path = path.parent / "baseline_metrics.csv"
     csv_file = open(csv_file_path, "w")
     metrics_path = path / "baseline_model"
@@ -384,25 +386,22 @@ def baseline_metrics_to_csv(basedir: str):
 
 
 def baseline_to_tex(name: str, dir: str):
-    basedir = Path("./model_info")
-    csv_path = basedir / dir / "baseline_metrics.csv"
+    csv_path = dir / "baseline_metrics.csv"
     df = pd.read_csv(csv_path)
     df.to_latex(name, index=False, columns=[col for col in df.columns if col not in ["model_version", "trained_data", "mse", "rmse" "mape"]], float_format="%.3f")
 
 
-def combine_metrics_different_replay(gathered_filename: str, filename: str, dirs: List[str], replays: List[int], metric: str):
-    basedir = Path("./model_info")
+def combine_metrics_different_replay(gathered_filename: str, filename: str, exp_name: str, replays: List[int], metric: str):
     complete_df = pd.DataFrame()
-    for dir, replay in zip(dirs, replays):
-        csv_path = basedir / dir / filename
+    for r in replays:
+        csv_path = Path("./models", exp_name, str(r), filename)
         df = pd.read_csv(csv_path)
         complete_df["evaluated_data"] = df["evaluated_data"]
-        complete_df[f"{metric}_{replay}"] = df[metric]
-    complete_df.to_latex(gathered_filename, index=False, float_format="%.3f")
+        complete_df[f"{metric}_{r}"] = df[metric]
+    complete_df.to_latex(Path("./models", exp_name, gathered_filename), index=False, float_format="%.3f")
 
 
-def _sort_dataframe(basedir):
-    path = Path("model_info", basedir)
+def _sort_dataframe(path: Path):
     metrics_path = path / "metrics.csv"
     
     df = pd.read_csv(metrics_path)
@@ -411,8 +410,7 @@ def _sort_dataframe(basedir):
     df.to_csv(metrics_path, index=False, columns=[col for col in df.columns if col not in ["mse", "rmse" "mape"]])
 
 
-def wanted_metrics(basedir, basedataset):
-    path = Path("model_info", basedir)
+def wanted_metrics(path, basedataset):
     metrics_path = path / "metrics.csv"
     
     df = pd.read_csv(metrics_path)

@@ -1,7 +1,7 @@
+__pycache__
 assets/*
-model_info/*
+models/*
 replay_data/*
 venv
 *.tex
-
-__pycache__
+params.yaml
