@@ -13,13 +13,13 @@ def baseline_metrics(name, dir_for_baseline, eval_datasets):
     baseline_to_tex(name, dir_for_baseline)
 
 
-def experiment(exp_name: str, replay_portions: List[int], datasets: List[str], yaml_filename: str, metric: str):
+def experiment(exp_name: str, replay_portions: List[int], datasets: List[str], yaml_filename: str, metric: str, track_emissions: bool):
     run_continual_on_all_datasets_all_replays(
         exp_name, yaml_filename,
-        datasets, replay_portions)
-    
+        datasets, replay_portions, track_emissions)
+
     baseline_metrics(Path("./models", exp_name, "baseline.tex"), Path("./models", exp_name, str(replay_portions[0])), datasets)
-    
+
     combine_metrics_different_replay(
         "eval_prev.tex",
         "eval_combined_previous_data.csv",
@@ -37,35 +37,7 @@ def experiment(exp_name: str, replay_portions: List[int], datasets: List[str], y
     )
 
 
-def cnc_experiment():
-    experiment(
-        "cnc_milling_toolwear",
-        [0, 20, 60, 100],
-        ["cnc_milling_with_toolwear_baseline",
-        #"cnc_milling_with_toolwear_01",
-        "cnc_milling_with_toolwear_02",
-        "cnc_milling_with_toolwear_03",
-        #"cnc_milling_with_toolwear_04",
-        #"cnc_milling_with_toolwear_05",
-        #"cnc_milling_with_toolwear_06",
-        #"cnc_milling_with_toolwear_07",
-        "cnc_milling_with_toolwear_09",
-        "cnc_milling_with_toolwear_10",
-        "cnc_milling_with_toolwear_11",
-        "cnc_milling_with_toolwear_12",
-        "cnc_milling_with_toolwear_13",
-        "cnc_milling_with_toolwear_14",
-        "cnc_milling_with_toolwear_15",
-        #"cnc_milling_with_toolwear_16",
-        "cnc_milling_with_toolwear_17",
-        "cnc_milling_with_toolwear_18",
-        ],
-        "cnc_toolwear.yaml",
-        "accuracy"
-    )
-
-
-def bosch_cnc_experiment():
+def bosch_cnc_experiment(track_emissions: bool = False):
     experiment(
         "bosch_cnc_vibration",
         [0, 20, 60, 100],
@@ -75,11 +47,12 @@ def bosch_cnc_experiment():
         "bosch_cnc_M01_2021_02",
         "bosch_cnc_M01_2021_08"],
         "bosch_cnc.yaml",
-        "accuracy"
+        "f1",
+        track_emissions
     )
 
 
-def broaching_tw_experiment():
+def broaching_tw_experiment(track_emissions: bool = False):
     experiment(
         "broaching_toolwear",
         [0, 20, 60, 100],
@@ -89,21 +62,20 @@ def broaching_tw_experiment():
         "broaching_toolwear_4X",
         "broaching_toolwear_5X"],
         "broaching_toolwear.yaml",
-        "r2"
+        "r2",
+        track_emissions
         )
+
+
+def piston_rod_experiment(track_emissions: bool = False):
+    piston_rod_datasets = ["piston_rod_set_1", "piston_rod_set_2", "piston_rod_set_3", "piston_rod_set_4", "piston_rod_set_5"]
+    experiment("piston_rod", [0, 20, 60, 100], piston_rod_datasets, "piston_rod.yaml", "r2", track_emissions)
 
 
 if __name__ == "__main__":
     
-    #bosch_cnc_experiment()
+    #bosch_cnc_experiment(True)
     
-    #cnc_experiment()
+    broaching_tw_experiment(True)
     
-    #broaching_tw_experiment()
-    
-    piston_rod_datasets = ["piston_rod_set_1",
-                           "piston_rod_set_2",
-                           "piston_rod_set_3",
-                           "piston_rod_set_4",
-                           "piston_rod_set_5"]
-    experiment("piston_rod", [0, 20, 60, 100], piston_rod_datasets, "piston_rod.yaml", "r2")
+    #piston_rod_experiment(True)

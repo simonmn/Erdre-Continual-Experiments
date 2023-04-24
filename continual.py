@@ -6,6 +6,8 @@ import shutil
 import yaml
 import json
 import pandas as pd
+from codecarbon import track_emissions
+from codecarbon import EmissionsTracker
 
 np.random.seed(2022)
 from erdre import profiling, clean, featurize, split, scale, sequentialize, combine, train, evaluate
@@ -36,7 +38,7 @@ from continual_config import (
 )
 
 
-def create_base_model(model_name: str, dataset: str, replay_portion: float, model_path: Path):
+def create_base_model(model_name: str, dataset: str, replay_portion: float, model_path: Path, track_emissions: bool):
     np.random.seed(2022)
     clean_folders()
     update_dataset_param(dataset)
@@ -85,14 +87,13 @@ def create_base_model(model_name: str, dataset: str, replay_portion: float, mode
     #model_path = Path("./models",  model_name, replay_portion)
     model_file_path = model_path / "model.h5"
 
-    # Train new model
     train(DATA_TRAIN_PATH=DATA_COMBINED_PATH / "train.npz",
-          MODELS_FILE_PATH=model_file_path,
-          MODELS_PATH=model_path,
-          model_exists=False,
-          OUTPUT_FEATURES_PATH=OUTPUT_FEATURES_PATH,
-          PLOTS_PATH=PLOTS_PATH,
-          TRAININGLOSS_PLOT_PATH=TRAININGLOSS_PLOT_PATH)
+        MODELS_FILE_PATH=model_file_path,
+        MODELS_PATH=model_path,
+        model_exists=False,
+        OUTPUT_FEATURES_PATH=OUTPUT_FEATURES_PATH,
+        PLOTS_PATH=PLOTS_PATH,
+        TRAININGLOSS_PLOT_PATH=TRAININGLOSS_PLOT_PATH)
 
     # Evaluate model on basedata
     evaluate(MODELS_FILE_PATH=model_file_path,
@@ -123,7 +124,7 @@ def create_base_model(model_name: str, dataset: str, replay_portion: float, mode
     yaml.safe_dump(yaml_data, open(model_path / "history.yaml", "w"))
 
 
-def continue_from_model(model_name: str, dataset: str, replay_portion: float, model_path: Path):
+def continue_from_model(model_name: str, dataset: str, replay_portion: float, model_path: Path, track_emissions: bool):
     np.random.seed(2022)
     datasets_yaml = yaml.safe_load(open(model_path / "history.yaml", "r"))
     replay_datasets = datasets_yaml["datasets"]
@@ -182,12 +183,12 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float, mo
 
     # Load old model and train it
     train(DATA_TRAIN_PATH=DATA_COMBINED_PATH / "train.npz",
-          MODELS_FILE_PATH=model_file_path,
-          MODELS_PATH=model_path,
-          model_exists=True,
-          OUTPUT_FEATURES_PATH=OUTPUT_FEATURES_PATH,
-          PLOTS_PATH=PLOTS_PATH,
-          TRAININGLOSS_PLOT_PATH=TRAININGLOSS_PLOT_PATH)
+        MODELS_FILE_PATH=model_file_path,
+        MODELS_PATH=model_path,
+        model_exists=True,
+        OUTPUT_FEATURES_PATH=OUTPUT_FEATURES_PATH,
+        PLOTS_PATH=PLOTS_PATH,
+        TRAININGLOSS_PLOT_PATH=TRAININGLOSS_PLOT_PATH)
 
     # Evaluate model on newest data
     evaluate(MODELS_FILE_PATH=model_file_path,
@@ -248,7 +249,7 @@ def continue_from_model(model_name: str, dataset: str, replay_portion: float, mo
     yaml.safe_dump(datasets_yaml, open(model_path / "history.yaml", "w"))
 
 
-def run_continual_on_all_datasets_all_replays(basename: str, param_file: str, datasets: List[str], replay_values: List[int]):
+def run_continual_on_all_datasets_all_replays(basename: str, param_file: str, datasets: List[str], replay_values: List[int], track_emissions: bool):
     np.random.seed(2022)
     assert min(
         replay_values) >= 0, "All replay portions must be larger than 0 (percentage to replay)."
@@ -258,7 +259,7 @@ def run_continual_on_all_datasets_all_replays(basename: str, param_file: str, da
     move_param_file(param_file)
     
     # Run first time, creates original model which we use for other replay values
-    run_continual_on_all_datasets(basename, datasets, replay_values[0])
+    run_continual_on_all_datasets(basename, datasets, replay_values[0], None, track_emissions)
     evaluate_basemodel_on_all(Path("./models", basename, str(replay_values[0])), datasets)
 
     basemodel = Path("./models", basename, str(replay_values[0]), "models", "model_0.h5")
@@ -266,24 +267,39 @@ def run_continual_on_all_datasets_all_replays(basename: str, param_file: str, da
         # Use basemodel instead of creating new, currently a new model is created, but discarded as
         # there is currently tight coupling between moving replay portion for future use and 
         # creating the base model.
-        run_continual_on_all_datasets(basename, datasets, replay_value, basemodel)
+        # Marked by the basemodel param
+        run_continual_on_all_datasets(basename, datasets, replay_value, basemodel, track_emissions)
         evaluate_basemodel_on_all(Path("./models", basename, str(replay_value)), datasets)
 
 
-def run_continual_on_all_datasets(basename: str, datasets: List[str], replay_value: int, basemodel: Path = None):
+def run_continual_on_all_datasets(basename: str, datasets: List[str], replay_value: int, basemodel: Path = None, track_emissions: bool = False):
     np.random.seed(2022)
     
     model_path = Path("./models",  basename, str(replay_value))
     
-    create_base_model(basename,
-                      datasets[0], replay_value, model_path)
-    
-    if basemodel is not None:
+    """ if basemodel is None:
+        # No model exists
+        # Create new model, this also creates the replay_portion of training/test data
+        create_base_model(basename,
+                        datasets[0], replay_value, model_path)
+    else:
+        # If model exists, move old model, need to move replay portion and possibly evaluate as well.
         shutil.copy(basemodel, Path(model_path, "models", "model_0.h5"))
-        shutil.copy(basemodel, Path(model_path, "model.h5"))
+        shutil.copy(basemodel, Path(model_path, "model.h5")) """
+    
+    if track_emissions:
+        tracker = EmissionsTracker(project_name=f"{basename}_{replay_value}", save_to_file=True, log_level="critical", tracking_mode="process", gpu_ids=[0], output_dir="emissions")
+        tracker.start()
+        
+    create_base_model(basename,
+                        datasets[0], replay_value, model_path, track_emissions)
     
     for dataset in datasets[1:]:
-        continue_from_model(basename, dataset, replay_value, model_path)
+        continue_from_model(basename, dataset, replay_value, model_path, track_emissions)
+    
+    if track_emissions:
+        tracker.stop()
+    
     convert_json_metrics_to_csv(basename, replay_value)
     wanted_metrics(model_path, datasets[0])
 
@@ -297,7 +313,7 @@ def evaluate_basemodel_on_all(model_path: Path, datasets: List[str]):
         test_path = replay_path / "test" / f"{dataset}.npz"
         calibrate_path = replay_path / "calibrate" / f"{dataset}.npz"
         
-        evaluate(MODELS_FILE_PATH=model_path / "model.h5",
+        evaluate(MODELS_FILE_PATH=model_path / "models" / "model_0.h5",
              DATA_TRAIN_PATH=train_path,
              DATA_TEST_PATH=test_path,
              DATA_CALIBRATE_PATH=calibrate_path,
