@@ -4,4 +4,6 @@ models/*
 replay_data/*
 venv
 *.tex
-params.yaml
+.vscode/*
+.conda/*
+emissions/*

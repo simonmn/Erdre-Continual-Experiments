@@ -14,7 +14,7 @@ backcall==0.2.0
 Brotli==1.0.9
 cachetools==5.0.0
 certifi==2021.10.8
-cffi==1.15.0
+cffi==1.15.1
 charset-normalizer==2.0.12
 click==8.0.4
 cloudpickle==2.0.0
@@ -41,7 +41,7 @@ dulwich==0.20.32
 dvc==2.9.5
 edward2==0.0.2
 entrypoints==0.4
-erdre @ git+https://github.com/simonmn/Erdre.git@076924b48b2201cff36d0d13169e0cd38eaf610d
+erdre @ git+https://github.com/simonmn/Erdre.git@e9773960947e2b700837acaa96245859aa59cf06
 executing==0.8.3
 filelock==3.8.0
 Flask==2.0.3
@@ -64,7 +64,7 @@ google-auth==2.6.0
 google-auth-oauthlib==0.4.6
 google-pasta==0.2.0
 grandalf==0.6
-greenlet==1.1.3
+#greenlet==1.1.3
 grpcio==1.44.0
 h5py==3.6.0
 htmlmin==0.1.12
